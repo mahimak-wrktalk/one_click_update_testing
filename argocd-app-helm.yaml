@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: wrktalk-test-app
+  namespace: argocd
+spec:
+  project: default
+
+  source:
+    # IMPORTANT: Replace this with your actual Git repository URL
+    # For testing, you can use a local path or push to GitHub
+    repoURL: https://github.com/YOUR_USERNAME/YOUR_REPO.git
+    targetRevision: HEAD
+    path: helm-chart/wrktalk-test
+
+    helm:
+      # Values from the single values.yaml file
+      # The agent will override image.tag dynamically using --helm-set
+      parameters:
+        - name: image.tag
+          value: "v1.0.0"
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

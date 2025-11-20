@@ -1,0 +1,21 @@
+# Single values.yaml for all clients
+# Client-specific values will be overridden via --set at runtime
+
+image:
+  repository: wrktalk-test
+  tag: "v1.0.0"  # Default tag, will be overridden by agent
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+service:
+  type: ClusterIP
+  port: 3000
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi

@@ -1,0 +1,274 @@
+🐳 Phase 2: Create Simple Test Application (10 mins)
+Step 1: Build Test Application Images
+bash# Create test app directory
+mkdir -p ~/wrktalk-test && cd ~/wrktalk-test
+
+# Create simple Node.js app
+cat > app.js <<'EOF'
+const express = require('express');
+const app = express();
+const VERSION = process.env.VERSION || 'unknown';
+
+app.get('/', (req, res) => {
+  res.json({
+    app: 'WrkTalk Test',
+    version: VERSION,
+    message: `Running version ${VERSION}`,
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'healthy', version: VERSION });
+});
+
+app.listen(3000, () => {
+  console.log(`App version ${VERSION} listening on port 3000`);
+});
+EOF
+
+# Create package.json
+cat > package.json <<'EOF'
+{
+  "name": "wrktalk-test",
+  "version": "1.0.0",
+  "main": "app.js",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
+EOF
+
+# Create Dockerfile
+cat > Dockerfile <<'EOF'
+FROM node:18-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY app.js .
+EXPOSE 3000
+ENV VERSION=unknown
+CMD ["node", "app.js"]
+EOF
+
+# Build images inside Minikube's Docker
+eval $(minikube docker-env)
+
+# Build v1.0.0
+docker build -t wrktalk-test:v1.0.0 --build-arg VERSION=v1.0.0 .
+
+# Modify for v2.0.0 (just change default version in app.js)
+sed -i.bak "s/VERSION || 'unknown'/VERSION || 'v2.0.0'/g" app.js
+docker build -t wrktalk-test:v2.0.0 --build-arg VERSION=v2.0.0 .
+
+# Restore original
+mv app.js.bak app.js
+
+# Verify images
+docker images | grep wrktalk-test
+
+📋 Phase 3: Create Helm Chart with Single values.yaml (10 mins)
+Step 1: Create Helm Chart Structure
+bashcd ~/wrktalk-test
+mkdir -p helm-chart/wrktalk-test/templates
+
+# Create Chart.yaml
+cat > helm-chart/wrktalk-test/Chart.yaml <<'EOF'
+apiVersion: v2
+name: wrktalk-test
+description: WrkTalk Test Application
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+EOF
+
+# Create values.yaml (SINGLE FILE - used for ALL clients)
+cat > helm-chart/wrktalk-test/values.yaml <<'EOF'
+# Single values.yaml for all clients
+# Client-specific values will be overridden via --set at runtime
+
+image:
+  repository: wrktalk-test
+  tag: "v1.0.0"  # Default tag, will be overridden by agent
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+service:
+  type: ClusterIP
+  port: 3000
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+EOF
+
+# Create Deployment template
+cat > helm-chart/wrktalk-test/templates/deployment.yaml <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Chart.Name }}
+  labels:
+    app: {{ .Chart.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Chart.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Chart.Name }}
+    spec:
+      containers:
+      - name: app
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: 3000
+        env:
+        - name: VERSION
+          value: "{{ .Values.image.tag }}"
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+EOF
+
+# Create Service template
+cat > helm-chart/wrktalk-test/templates/service.yaml <<'EOF'
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Chart.Name }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+  - port: {{ .Values.service.port }}
+    targetPort: 3000
+    protocol: TCP
+  selector:
+    app: {{ .Chart.Name }}
+EOF
+
+Step 2: Deploy Chart to Local Directory (ArgoCD will use this)
+bash# Create a local Git repo (simpler for testing than remote Git)
+cd ~/wrktalk-test
+git init
+git add .
+git commit -m "Initial commit with Helm chart"
+
+# Note the path
+pwd  # This will be your repo path, e.g., /Users/yourname/wrktalk-test
+
+🚀 Phase 4: Create ArgoCD Application (5 mins)
+Single ArgoCD Application YAML
+bashcd ~/wrktalk-test
+
+# Create ArgoCD Application (SINGLE FILE for your test)
+cat > argocd-application.yaml <<EOF
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: wrktalk-test-app
+  namespace: argocd
+spec:
+  project: default
+  
+  source:
+    # Using local file path for testing
+    repoURL: file://$(pwd)
+    targetRevision: HEAD
+    path: helm-chart/wrktalk-test
+    
+    helm:
+      # Default values from values.yaml
+      # Agent will override image.tag dynamically
+      parameters:
+        - name: image.tag
+          value: "v1.0.0"
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+EOF
+
+# Apply ArgoCD Application
+kubectl apply -f argocd-application.yaml
+
+# Wait a moment for ArgoCD to sync
+sleep 10
+
+# Check ArgoCD application
+argocd app get wrktalk-test-app
+
+# Wait for sync to complete
+argocd app wait wrktalk-test-app --timeout 300
+Verify Application is Running
+bash# Check pods
+kubectl get pods -l app=wrktalk-test
+
+# Should see 2 pods running with v1.0.0
+
+# Test the application
+kubectl port-forward svc/wrktalk-test 3000:3000 &
+
+curl http://localhost:3000
+# Expected output: {"app":"WrkTalk Test","version":"v1.0.0",...}
+✅ Checkpoint: You now have a working app deployed via ArgoCD with v1.0.0
+
+🔄 Phase 5: Manual Test - Update Image Tag via ArgoCD (5 mins)
+Before writing agent code, let's manually test what the agent will do.
+Test Manual Update
+bash# Current version check
+argocd app get wrktalk-test-app | grep "image.tag"
+
+# Manually update image tag (this is what agent will do)
+argocd app set wrktalk-test-app \
+  --helm-set image.tag=v2.0.0 \
+  --grpc-web
+
+# Trigger sync
+argocd app sync wrktalk-test-app --grpc-web
+
+# Watch the update happen
+kubectl get pods -l app=wrktalk-test -w
+
+# You'll see:
+# - New pods created with v2.0.0
+# - Old pods terminated
+# - Rolling update in action
+
+# Wait for sync to complete
+argocd app wait wrktalk-test-app --health --timeout 300
+
+# Verify new version
+curl http://localhost:3000
+# Expected: {"app":"WrkTalk Test","version":"v2.0.0",...}
+
+# Check ArgoCD status
+argocd app get wrktalk-test-app
+# Should show: Sync Status: Synced, Health Status: Healthy
+✅ Manual Test Successful! This proves the update mechanism works.
