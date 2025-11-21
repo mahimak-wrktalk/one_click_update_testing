@@ -1,10 +1,32 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wrktalk-agent-config
+  namespace: default
+data:
+  CLIENT_ID: "101"
+  GCC_API_URL: "http://mock-gcc-service.default.svc.cluster.local:5000/api/v1"
+  ARGOCD_SERVER: "argocd-server.argocd.svc.cluster.local"
+  ARGOCD_APP_NAME: "wrktalk-test-app"
+  POLL_INTERVAL: "10"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: wrktalk-agent-secret
+  namespace: default
+type: Opaque
+stringData:
+  ARGOCD_USERNAME: "admin"
+  ARGOCD_PASSWORD: "bLYgjSASIbYvT4PG"
+
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: wrktalk-agent
   namespace: default
-  labels:
-    app: wrktalk-agent
 spec:
   replicas: 1
   selector:
@@ -15,37 +37,52 @@ spec:
       labels:
         app: wrktalk-agent
     spec:
-      serviceAccountName: wrktalk-agent
       containers:
       - name: agent
         image: wrktalk-agent:latest
         imagePullPolicy: IfNotPresent
-        envFrom:
-        - configMapRef:
-            name: wrktalk-agent-config
-        - secretRef:
-            name: wrktalk-agent-secret
+        env:
+        # From ConfigMap
+        - name: CLIENT_ID
+          valueFrom:
+            configMapKeyRef:
+              name: wrktalk-agent-config
+              key: CLIENT_ID
+        - name: GCC_API_URL
+          valueFrom:
+            configMapKeyRef:
+              name: wrktalk-agent-config
+              key: GCC_API_URL
+        - name: ARGOCD_SERVER
+          valueFrom:
+            configMapKeyRef:
+              name: wrktalk-agent-config
+              key: ARGOCD_SERVER
+        - name: ARGOCD_APP_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: wrktalk-agent-config
+              key: ARGOCD_APP_NAME
+        - name: POLL_INTERVAL
+          valueFrom:
+            configMapKeyRef:
+              name: wrktalk-agent-config
+              key: POLL_INTERVAL
+        # From Secret
+        - name: ARGOCD_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: wrktalk-agent-secret
+              key: ARGOCD_USERNAME
+        - name: ARGOCD_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: wrktalk-agent-secret
+              key: ARGOCD_PASSWORD
         resources:
           requests:
-            memory: "128Mi"
-            cpu: "100m"
+            cpu: 50m
+            memory: 64Mi
           limits:
-            memory: "256Mi"
-            cpu: "200m"
-        livenessProbe:
-          exec:
-            command:
-            - python
-            - -c
-            - "import sys; sys.exit(0)"
-          initialDelaySeconds: 10
-          periodSeconds: 30
-        readinessProbe:
-          exec:
-            command:
-            - python
-            - -c
-            - "import sys; sys.exit(0)"
-          initialDelaySeconds: 5
-          periodSeconds: 10
-      restartPolicy: Always
+            cpu: 200m
+            memory: 256Mi
