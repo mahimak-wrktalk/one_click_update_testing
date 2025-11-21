@@ -168,6 +168,7 @@ kubectl get pods -l app=wrktalk-test
 # Check deployment
 kubectl get deployment wrktalk-test
 
+
 # Check service
 kubectl get service wrktalk-test
 ```

@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wrktalk-agent-config
+  namespace: default
+data:
+  CLIENT_ID: "101"
+  GCC_API_URL: "http://mock-gcc-service.default.svc.cluster.local:5000/api/v1"
+  ARGOCD_APP_NAME: "wrktalk-test-app"
+  ARGOCD_SERVER: "argocd-server.argocd.svc.cluster.local"
+  POLL_INTERVAL: "10"
+  ARGOCD_INSECURE: "true"

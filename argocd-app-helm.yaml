@@ -9,7 +9,7 @@ spec:
   source:
     # IMPORTANT: Replace this with your actual Git repository URL
     # For testing, you can use a local path or push to GitHub
-    repoURL: https://github.com/YOUR_USERNAME/YOUR_REPO.git
+    repoURL: https://github.com/mahimak-wrktalk/one_click_update_testing.git
     targetRevision: HEAD
     path: helm-chart/wrktalk-test
 

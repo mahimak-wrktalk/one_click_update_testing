@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-gcc
+  namespace: default
+  labels:
+    app: mock-gcc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mock-gcc
+  template:
+    metadata:
+      labels:
+        app: mock-gcc
+    spec:
+      containers:
+      - name: gcc-api
+        image: mock-gcc:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5000
+          name: http
+        env:
+        - name: PORT
+          value: "5000"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-gcc-service
+  namespace: default
+  labels:
+    app: mock-gcc
+spec:
+  type: ClusterIP
+  selector:
+    app: mock-gcc
+  ports:
+  - port: 5000
+    targetPort: 5000
+    protocol: TCP
+    name: http

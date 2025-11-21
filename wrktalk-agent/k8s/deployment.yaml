@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wrktalk-agent
+  namespace: default
+  labels:
+    app: wrktalk-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wrktalk-agent
+  template:
+    metadata:
+      labels:
+        app: wrktalk-agent
+    spec:
+      serviceAccountName: wrktalk-agent
+      containers:
+      - name: agent
+        image: wrktalk-agent:latest
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - configMapRef:
+            name: wrktalk-agent-config
+        - secretRef:
+            name: wrktalk-agent-secret
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "import sys; sys.exit(0)"
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "import sys; sys.exit(0)"
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      restartPolicy: Always
